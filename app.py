@@ -65,14 +65,7 @@ if uploaded_file:
                     # Buat Naskah
                     model = genai.GenerativeModel('gemini-3-flash-preview')
                     cta = "subscribe dan like" if platform == "YouTube" else "follow dan like"
-                    prompt = (
-    f"Tonton video ini dan buatkan naskah voice over dalam {bahasa} dengan gaya {gaya}. "
-    f"Tujuan konten adalah {tujuan}. "
-    f"Durasi video {durasi:.1f} detik, jadi naskah tidak boleh lebih dari {limit_kata} kata. "
-    f"Fokuslah hanya pada pembahasan apa yang terlihat di video secara alami. "
-    f"TIDAK PERLU menyebutkan nama brand atau kalimat penutup promosi otomatis. "
-    f"HANYA berikan teks narasi yang akan dibaca langsung."
-)
+                    # brand = "Zar's Diecast Garage" if tujuan != "Review Produk" else "Rekomendasi Barang Berguna"
                     
                     prompt = f"Buat naskah {bahasa} gaya {gaya}. Tujuan: {tujuan}. Durasi video {durasi:.1f} detik. Maksimal {limit_kata} kata. Sebutkan brand {brand} dan akhiri dengan CTA: {cta}. HANYA tulis narasi saja."
                     
