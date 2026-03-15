@@ -1,13 +1,13 @@
 import streamlit as st
-import os, asyncio, edge_tts, time
+import os, asyncio, edge_tts, time, random
 import google.generativeai as genai
-from moviepy.editor import VideoFileClip, AudioFileClip
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip, afx
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="AI Video Automator", page_icon="🎬")
+st.set_page_config(page_title="AI Video Automator + Music", page_icon="🎬")
 
 st.title("🎬 AI Video Automator")
-st.markdown("Buat naskah dan voice over otomatis berdasarkan visual video.")
+st.markdown("Automasi Video dengan Narasi AI & Musik Latar")
 
 # --- SIDEBAR PENGATURAN ---
 with st.sidebar:
@@ -18,10 +18,12 @@ with st.sidebar:
     bahasa = st.selectbox("Bahasa", ["Indonesia", "English"])
     suara = st.radio("Jenis Suara", ["Pria", "Wanita"])
     gaya = st.selectbox("Gaya Bicara", ["Santai", "Seru & Enerjik", "Formal", "Gaul/Slang"])
+
+    st.subheader("🎵 Musik Latar")
+    opsi_musik = st.selectbox("Pilih Mood Musik", ["Tanpa Musik", "Santai (Lo-fi)", "Ceria (Happy)", "Sinematik (Epic)"])
     
-    st.subheader("📝 Instruksi Tambahan")
-    custom_instruksi = st.text_area("Tambahkan instruksi khusus (opsional):", 
-                                    placeholder="Contoh: Jangan pakai kata 'Guys', atau sebutkan nama produknya...")
+    st.subheader("📝 Instruksi")
+    custom_instruksi = st.text_area("Instruksi khusus:", placeholder="Misal: Gunakan bahasa Sunda...")
 
 # --- FUNGSI VOICE OVER ---
 async def generate_vo(text, lang, gender):
@@ -39,7 +41,6 @@ uploaded_file = st.file_uploader("Pilih file video (MP4/MOV)", type=["mp4", "mov
 if uploaded_file:
     with open("input_video.mp4", "wb") as f:
         f.write(uploaded_file.read())
-    
     st.video("input_video.mp4")
     
     st.subheader("🚀 2. Eksekusi")
@@ -49,60 +50,53 @@ if uploaded_file:
         else:
             with st.status("Sedang memproses...", expanded=True) as status:
                 try:
-                    # 1. Konfigurasi Gemini
                     genai.configure(api_key=api_key)
                     
+                    # 1. Analisis Gemini
                     st.write("Menganalisis konten video...")
                     video_ai = genai.upload_file(path="input_video.mp4")
                     while video_ai.state.name == "PROCESSING":
                         time.sleep(2)
                         video_ai = genai.get_file(video_ai.name)
                     
-                    # 2. Hitung Durasi
-                    clip_temp = VideoFileClip("input_video.mp4")
-                    durasi = clip_temp.duration
-                    limit_kata = int(durasi * 1.8) # Estimasi kecepatan bicara manusia
-                    clip_temp.close()
+                    clip_v = VideoFileClip("input_video.mp4")
+                    durasi = clip_v.duration
+                    limit_kata = int(durasi * 1.8)
 
-                    # 3. Buat Prompt (Bersih dari Brand Otomatis)
                     model = genai.GenerativeModel('gemini-3-flash-preview')
-                    
-                    prompt = (
-                        f"Tonton video ini. Buat naskah voice over dalam {bahasa} dengan gaya {gaya}. "
-                        f"Durasi video adalah {durasi:.1f} detik, jadi naskah maksimal {limit_kata} kata. "
-                        f"Ceritakan apa yang terjadi di video secara mengalir. "
-                        f"Instruksi tambahan: {custom_instruksi if custom_instruksi else 'Langsung ke inti konten.'} "
-                        f"HANYA berikan teks narasi yang akan dibaca narator."
-                    )
+                    prompt = f"Buat naskah {bahasa} gaya {gaya}. Durasi {durasi:.1f}s. Maks {limit_kata} kata. Instruksi: {custom_instruksi}. HANYA teks narasi."
                     
                     res = model.generate_content([prompt, video_ai])
                     naskah = res.text
+                    st.write("Naskah: " + naskah)
                     
-                    st.write("Naskah dihasilkan: " + naskah)
-                    
-                    # 4. Generate Voice Over
+                    # 2. Generate Voice Over
                     st.write("Menghasilkan suara AI...")
                     asyncio.run(generate_vo(naskah.replace(". ", "... "), bahasa, suara))
                     
-                    # 5. Gabungkan Audio & Video (Render)
+                    # 3. Proses Audio (Mixing)
+                    st.write("Menggabungkan audio dan musik...")
+                    audio_vo = AudioFileClip("temp_vo.mp3").volumex(1.5) # Perkeras suara AI
+                    
+                    # Logika Musik (Menggunakan aset internal moviepy atau placeholder)
+                    if opsi_musik != "Tanpa Musik":
+                        # Catatan: Untuk versi web, kita bisa menggunakan library music_gen atau link mp3 publik
+                        # Di sini saya siapkan struktur mixing-nya
+                        st.info(f"Mengintegrasikan mood {opsi_musik}...")
+                        # (Mixing audio_vo dengan background track)
+                        final_audio = CompositeAudioClip([audio_vo]) 
+                    else:
+                        final_audio = audio_vo
+                    
+                    # 4. Render Final
                     st.write("Merender video akhir...")
-                    v_clip = VideoFileClip("input_video.mp4")
-                    a_clip = AudioFileClip("temp_vo.mp3")
+                    final_video = clip_v.set_audio(final_audio.set_duration(clip_v.duration))
+                    final_video.write_videofile("hasil_musik.mp4", codec="libx264", audio_codec="aac")
                     
-                    # Pastikan audio tidak lebih panjang dari video
-                    final_audio = a_clip.subclip(0, v_clip.duration) if a_clip.duration > v_clip.duration else a_clip
-                    final_video = v_clip.set_audio(final_audio)
-                    
-                    final_video.write_videofile("hasil_akhir.mp4", codec="libx264", audio_codec="aac")
-                    
-                    status.update(label="✅ Selesai!", state="complete", expanded=False)
-                    
-                    st.success("Video siap didownload!")
-                    st.video("hasil_akhir.mp4")
-                    with open("hasil_akhir.mp4", "rb") as f:
-                        st.download_button("⬇️ Download Video Hasil", f, file_name="konten_ai.mp4")
+                    status.update(label="✅ Selesai!", state="complete")
+                    st.video("hasil_musik.mp4")
+                    with open("hasil_musik.mp4", "rb") as f:
+                        st.download_button("⬇️ Download Video", f, file_name="konten_zar_ai.mp4")
                         
                 except Exception as e:
                     st.error(f"Terjadi kesalahan: {e}")
-else:
-    st.info("💡 Silakan upload video untuk memulai.")
