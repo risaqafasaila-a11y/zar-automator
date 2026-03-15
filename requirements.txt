@@ -2,4 +2,3 @@ streamlit
 moviepy
 edge-tts
 google-generativeai
-requests
