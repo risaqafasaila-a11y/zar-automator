@@ -63,7 +63,7 @@ if uploaded_file:
                     clip_temp.close()
 
                     # Buat Naskah
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
                     cta = "subscribe dan like" if platform == "YouTube" else "follow dan like"
                     brand = "Zar's Diecast Garage" if tujuan != "Review Produk" else "Rekomendasi Barang Berguna"
                     
