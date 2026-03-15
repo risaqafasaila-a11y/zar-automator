@@ -69,7 +69,7 @@ if uploaded_file:
                         video_ai = genai.get_file(video_ai.name)
                     
                     clip_v = VideoFileClip("input_video.mp4")
-                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                    model = genai.GenerativeModel('gemini-3-flash-preview')
                     prompt_naskah = f"Buat naskah {bahasa} gaya {gaya}. Durasi {clip_v.duration:.1f}s. Instruksi: {custom_instruksi}. HANYA tulis narasi."
                     res = model.generate_content([prompt_naskah, video_ai])
                     naskah = res.text
