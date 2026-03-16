@@ -72,7 +72,7 @@ if uploaded_file:
                     clip_v = clip_v.crop(x_center=clip_v.w/2, y_center=clip_v.h/2, width=1920, height=1080)
 
                 # Pembuatan Naskah & Musik (Sama seperti sebelumnya)
-                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                model = genai.GenerativeModel('gemini-3-flash-preview')
                 prompt = f"Buat naskah {bahasa} gaya {gaya}. Durasi {clip_v.duration:.1f}s. {custom_instruksi}"
                 res = model.generate_content([prompt, video_ai])
                 naskah = res.text
