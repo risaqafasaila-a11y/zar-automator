@@ -17,7 +17,7 @@ with st.sidebar:
     st.subheader("🎙️ Pengaturan Suara")
     bahasa = st.selectbox("Bahasa", ["Indonesia", "English"])
     suara = st.radio("Jenis Suara", ["Pria", "Wanita"])
-    gaya = st.selectbox("Gaya Bicara", ["Santai", "Seru & Enerjik", "Formal", "Gaul/Slang"])
+    gaya = st.selectbox("Gaya Bicara", ["Santai", "Seru & Enerjik", "Formal", "Sinematik & Puitis", "Sales Promosi", "Gaul/Slang"])
 
     st.subheader("🎵 Musik Latar")
     opsi_musik = st.selectbox("Pilih Mood Musik", ["Tanpa Musik", "Santai (Lo-fi)", "Ceria (Happy)", "Sinematik (Epic)"])
