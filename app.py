@@ -1,93 +1,106 @@
 import streamlit as st
+import os, asyncio, edge_tts, time, requests
 import google.generativeai as genai
-import time
-import asyncio
-import edge_tts
-from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip, TextClip, CompositeVideoClip
 
-# Pastikan API Key aman di Secrets
-try:
-    GOOGLE_API_KEY = st.secrets["AIzaSyBsw8yR1XfHSG0uzoRIe8-7dW61ubMCuQU"]
-    genai.configure(api_key=GOOGLE_API_KEY)
-except:
-    st.error("API Key belum diset di Streamlit Secrets!")
+# --- KONFIGURASI ---
+MUSIC_DATABASE = {
+    "Santai": "https://www.chosic.com/wp-content/uploads/2021/07/The-Globe-Trotter.mp3",
+    "Ceria": "https://www.chosic.com/wp-content/uploads/2021/04/Happiness.mp3",
+    "Sinematik": "https://www.chosic.com/wp-content/uploads/2021/10/Inspirational-Background.mp3",
+    "Teknologi": "https://www.chosic.com/wp-content/uploads/2021/07/Technology-Glitch.mp3"
+}
 
-async def generate_voice(text, voice_name, output_path):
-    communicate = edge_tts.Communicate(text, voice_name, rate="+0%")
-    await communicate.save(output_path)
+st.set_page_config(page_title="Zar AI Video Automator", page_icon="🎬")
+st.title("🎬 Zar AI Video Automator + Subtitle")
 
-st.set_page_config(page_title="AI Video Automator", layout="wide")
-st.title("🎬 AI Video Automator")
+with st.sidebar:
+    st.header("⚙️ Konfigurasi")
+    api_key = st.text_input("Gemini API Key", type="password")
+    bahasa = st.selectbox("Bahasa", ["Indonesia", "English"])
+    suara = st.radio("Jenis Suara", ["Pria", "Wanita"])
+    gaya = st.selectbox("Gaya Bicara", ["Santai", "Seru & Enerjik", "Gaul/Slang"])
+    show_subtitle = st.checkbox("Tampilkan Subtitle", value=True)
+    custom_instruksi = st.text_area("Instruksi Tambahan:")
 
-# --- 1. UPLOAD VIDEO ---
-uploaded_file = st.file_uploader("Pilih file video (MP4/MOV)", type=['mp4', 'mov'])
-video_path = "temp_video.mp4"
+# --- FUNGSI HELPER ---
+async def generate_vo(text, lang, gender):
+    voice = "id-ID-ArdiNeural" if gender == "Pria" else "id-ID-GadisNeural"
+    if lang == "English": voice = "en-US-ChristopherNeural" if gender == "Pria" else "en-US-AvaNeural"
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save("temp_vo.mp3")
+
+def download_music(url, output_path):
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            with open(output_path, 'wb') as f: f.write(r.content)
+            return True
+    except: return False
+    return False
+
+# --- MAIN APP ---
+uploaded_file = st.file_uploader("📤 Upload Video", type=["mp4", "mov"])
 
 if uploaded_file:
-    with open(video_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    with open("input_video.mp4", "wb") as f: f.write(uploaded_file.read())
+    st.video("input_video.mp4")
     
-    # PERBAIKAN ROTASI DI SINI
-    video_clip = VideoFileClip(video_path)
-    
-    # Cek jika video memiliki rotasi portrait (90 atau 270 derajat)
-    if video_clip.rotation in [90, 270]:
-        # Tukar lebar dan tinggi agar tetap portrait
-        video_clip = video_clip.resize(video_clip.size[::-1])
-        video_clip.rotation = 0
-    elif video_clip.rotation == 180:
-        video_clip = video_clip.rotate(180)
-        video_clip.rotation = 0
-        
-    st.video(uploaded_file)
+    if st.button("🚀 MULAI PROSES"):
+        if not api_key: st.error("AIzaSyBsw8yR1XfHSG0uzoRIe8-7dW61ubMCuQU")
+        else:
+            with st.status("Sedang memproses...", expanded=True) as status:
+                try:
+                    genai.configure(api_key=api_key)
+                    st.write("🔍 Menganalisis video...")
+                    video_ai = genai.upload_file(path="input_video.mp4")
+                    while video_ai.state.name == "PROCESSING":
+                        time.sleep(2)
+                        video_ai = genai.get_file(video_ai.name)
+                    
+                    clip_v = VideoFileClip("input_video.mp4")
+                    model = genai.GenerativeModel('gemini-3-flash-preview')
+                    prompt_naskah = f"Buat naskah {bahasa} gaya {gaya}. Durasi {clip_v.duration:.1f}s. {custom_instruksi}. HANYA tulis narasi."
+                    res = model.generate_content([prompt_naskah, video_ai])
+                    naskah = res.text
+                    
+                    # 1. Generate Voice Over
+                    st.write("🎙️ Menghasilkan suara...")
+                    asyncio.run(generate_vo(naskah, bahasa, suara))
+                    audio_vo = AudioFileClip("temp_vo.mp3").volumex(1.8)
 
-    # --- 2. PENGATURAN ---
-    col1, col2 = st.columns(2)
-    with col1:
-        bahasa = st.selectbox("Bahasa:", ["Indonesia", "Sunda", "Jawa", "Inggris"])
-        jenis_suara = st.radio("Jenis Suara:", ["Pria", "Wanita"])
-        voice_map = {"Pria": "id-ID-ArdiNeural", "Wanita": "id-ID-GadisNeural"}
-    
-    with col2:
-        gaya = st.selectbox("Gaya Bicara:", ["Santai", "Dramatis", "Formal", "Energetik"])
-        kategori = st.selectbox("Tujuan Video:", ["Review Produk", "Motivasi", "Vlog", "Sinematik"])
+                    # 2. Proses Musik
+                    st.write("🎵 Menyiapkan musik...")
+                    res_mood = model.generate_content(f"Pilih satu kata mood (Santai, Ceria, Sinematik, atau Teknologi) untuk naskah ini: {naskah}")
+                    mood = res_mood.text.strip()
+                    url_m = MUSIC_DATABASE.get(mood, MUSIC_DATABASE["Santai"])
+                    download_music(url_m, "bgm.mp3")
+                    
+                    if os.path.exists("bgm.mp3"):
+                        bgm = AudioFileClip("bgm.mp3").volumex(0.12).set_duration(clip_v.duration)
+                        final_audio = CompositeAudioClip([audio_vo, bgm])
+                    else:
+                        final_audio = audio_vo
 
-    create_btn = st.button("🚀 GENERATE VIDEO")
+                    # 3. Proses Subtitle (JIKA DICENTANG)
+                    st.write("📝 Menambahkan subtitle...")
+                    video_final = clip_v.set_audio(final_audio.set_duration(clip_v.duration))
+                    
+                    if show_subtitle:
+                        # Membuat teks subtitle sederhana (satu blok teks untuk seluruh video)
+                        txt_clip = TextClip(naskah, fontsize=24, color='white', font='Arial-Bold', 
+                                            method='caption', size=(clip_v.w*0.8, None), 
+                                            bg_color='black').set_duration(clip_v.duration).set_position(('center', 'bottom'))
+                        video_final = CompositeVideoClip([video_final, txt_clip])
 
-    if create_btn:
-        durasi_video = video_clip.duration
-        
-        try:
-            with st.spinner("🤖 AI sedang memproses..."):
-                video_ai = genai.upload_file(path=video_path)
-                while video_ai.state.name == "PROCESSING":
-                    time.sleep(2)
-                    video_ai = genai.get_file(video_ai.name)
-
-                model = genai.GenerativeModel("gemini-3-flash-preview")
-                prompt = f"Buat narasi {kategori} dalam {bahasa} gaya {gaya}. Durasi {durasi_video} detik."
-                
-                response = model.generate_content([video_ai, prompt])
-                naskah = response.text.replace('"', '').strip()
-                
-                st.write("**Naskah AI:**", naskah)
-                
-                # Suara
-                asyncio.run(generate_voice(naskah, voice_map[jenis_suara], "vo.mp3"))
-                audio_clip = AudioFileClip("vo.mp3")
-                
-                # Gabungkan Audio & Video
-                audio_final = CompositeAudioClip([audio_clip.set_start(0)]).set_duration(durasi_video)
-                final_video = video_clip.set_audio(audio_final)
-                
-                # PENTING: Gunakan preset 'medium' agar metadata tersimpan dengan baik
-                final_video.write_videofile("final_output.mp4", codec="libx264", audio_codec="aac", fps=24)
-
-                st.success("✅ Video Selesai!")
-                st.video("final_output.mp4")
-                
-                with open("final_output.mp4", "rb") as file:
-                    st.download_button("📥 Download Video Hasil", file, "hasil_video.mp4")
-        
-        except Exception as e:
-            st.error(f"Error: {e}")
+                    # 4. Render
+                    st.write("🎚️ Merender hasil akhir...")
+                    video_final.write_videofile("hasil_sub.mp4", codec="libx264", audio_codec="aac")
+                    
+                    status.update(label="✅ Selesai!", state="complete")
+                    st.video("hasil_sub.mp4")
+                    with open("hasil_sub.mp4", "rb") as f:
+                        st.download_button("📥 Download", f, file_name="video_subtitle.mp4")
+                        
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan: {e}")
